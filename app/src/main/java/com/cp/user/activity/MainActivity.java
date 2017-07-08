@@ -21,10 +21,15 @@ import com.mapbox.mapboxsdk.maps.MapView;
 import com.mapbox.mapboxsdk.maps.MapboxMap;
 import com.mapbox.services.android.ui.geocoder.GeocoderAutoCompleteView;
 import com.mapbox.services.api.geocoding.v5.GeocodingCriteria;
+import com.mapbox.services.api.geocoding.v5.MapboxGeocoding;
+import com.mapbox.services.api.geocoding.v5.models.GeocodingResponse;
 import com.mapbox.services.commons.models.Position;
 
 import butterknife.BindView;
 import butterknife.ButterKnife;
+import retrofit2.Call;
+import retrofit2.Callback;
+import retrofit2.Response;
 
 /**
  * Created by yi on 07/07/2017.
@@ -57,6 +62,33 @@ public class MainActivity extends AppCompatActivity implements MainView {
 
         mapView.onCreate(savedInstanceState);
         mapView.getMapAsync(mapboxMap -> {
+
+            mapboxMap.setOnMapLongClickListener(point -> {
+                Position position = Position.fromCoordinates(point.getLatitude(), point.getLongitude());
+
+                MapboxGeocoding client = new MapboxGeocoding.Builder()
+                        .setAccessToken(Mapbox.getAccessToken())
+                        .setCoordinates(position)
+                        .setCountries(COUNTRIES)
+                        .setGeocodingType(GeocodingCriteria.TYPE_ADDRESS)
+                        .build();
+                client.enqueueCall(new Callback<GeocodingResponse>() {
+                    @Override
+                    public void onResponse(Call<GeocodingResponse> call, Response<GeocodingResponse> response) {
+                        if (response != null){
+                            autocomplete.setText(response.body().getFeatures().get(0).getAddress());
+                        }
+                    }
+
+                    @Override
+                    public void onFailure(Call<GeocodingResponse> call, Throwable t) {
+
+                    }
+                });
+
+                updateMap(point.getLatitude(), point.getLongitude());
+            });
+
             map = mapboxMap;
             userMarker = mapboxMap.addMarker(
                     new MarkerViewOptions()
@@ -69,12 +101,8 @@ public class MainActivity extends AppCompatActivity implements MainView {
 
         autocomplete.setAccessToken(Mapbox.getAccessToken());
         autocomplete.setCountries(COUNTRIES);
-        autocomplete.setType(GeocodingCriteria.TYPE_POI);
+        autocomplete.setType(GeocodingCriteria.TYPE_ADDRESS);
         autocomplete.setOnFeatureListener(feature -> {
-
-            if (map != null && adrMarker != null)
-                map.removeMarker(adrMarker);
-
             hideOnScreenKeyboard();
             Position position = feature.asPosition();
             updateMap(position.getLatitude(), position.getLongitude());
@@ -138,6 +166,10 @@ public class MainActivity extends AppCompatActivity implements MainView {
     }
 
     private void updateMap(double latitude, double longitude) {
+
+        if (map != null & adrMarker != null)
+            map.removeMarker(adrMarker);
+
         // Build marker
         adrMarker = map.addMarker(new MarkerViewOptions()
                 .position(new LatLng(latitude, longitude))
@@ -149,7 +181,7 @@ public class MainActivity extends AppCompatActivity implements MainView {
                 .zoom(15)
                 .build();
 
-        map.animateCamera(CameraUpdateFactory.newCameraPosition(cameraPosition), 3000, null);
+        map.animateCamera(CameraUpdateFactory.newCameraPosition(cameraPosition), 1000, null);
     }
 
     @Override
@@ -175,6 +207,5 @@ public class MainActivity extends AppCompatActivity implements MainView {
                 Toast.LENGTH_LONG).show();
         finish();
     }
-
 
 }
