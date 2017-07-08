@@ -2,12 +2,22 @@ package com.cp.user.activity;
 
 import android.location.Location;
 import android.os.Bundle;
+import android.support.v4.widget.DrawerLayout;
+import android.support.v7.app.ActionBarDrawerToggle;
 import android.support.v7.app.AppCompatActivity;
+import android.view.Gravity;
+import android.view.MenuItem;
+import android.view.View;
 import android.view.inputmethod.InputMethodManager;
+import android.widget.AdapterView;
+import android.widget.ListView;
 import android.widget.Toast;
 
+import com.cp.user.CPApplication;
 import com.cp.user.R;
+import com.cp.user.adapter.MenuAdapter;
 import com.cp.user.bus.ApplicationBus;
+import com.cp.user.model.HistoryAddress;
 import com.cp.user.mvp.MainPresenter;
 import com.cp.user.mvp.MainPresenterImpl;
 import com.cp.user.mvp.MainView;
@@ -24,6 +34,9 @@ import com.mapbox.services.api.geocoding.v5.GeocodingCriteria;
 import com.mapbox.services.api.geocoding.v5.MapboxGeocoding;
 import com.mapbox.services.api.geocoding.v5.models.GeocodingResponse;
 import com.mapbox.services.commons.models.Position;
+
+import java.util.ArrayList;
+import java.util.List;
 
 import butterknife.BindView;
 import butterknife.ButterKnife;
@@ -46,6 +59,15 @@ public class MainActivity extends AppCompatActivity implements MainView {
 
     private MainPresenter mainPresenter;
 
+    private MenuAdapter menuAdapter;
+    private ActionBarDrawerToggle mDrawerToggle;
+
+    @BindView(R.id.drawer_layout)
+    DrawerLayout mDrawerLayout;
+
+    @BindView(R.id.left_drawer)
+    ListView mDrawerList;
+
     @BindView(R.id.mapView)
     MapView mapView;
 
@@ -64,6 +86,7 @@ public class MainActivity extends AppCompatActivity implements MainView {
         mapView.getMapAsync(mapboxMap -> {
 
             mapboxMap.setOnMapLongClickListener(point -> {
+
                 Position position = Position.fromCoordinates(point.getLatitude(), point.getLongitude());
 
                 MapboxGeocoding client = new MapboxGeocoding.Builder()
@@ -75,7 +98,7 @@ public class MainActivity extends AppCompatActivity implements MainView {
                 client.enqueueCall(new Callback<GeocodingResponse>() {
                     @Override
                     public void onResponse(Call<GeocodingResponse> call, Response<GeocodingResponse> response) {
-                        if (response != null){
+                        if (response.body() != null && response.body().getFeatures() != null && response.body().getFeatures().size() > 0) {
                             autocomplete.setText(response.body().getFeatures().get(0).getAddress());
                         }
                     }
@@ -87,6 +110,7 @@ public class MainActivity extends AppCompatActivity implements MainView {
                 });
 
                 updateMap(point.getLatitude(), point.getLongitude());
+                mainPresenter.updateHistory(autocomplete.getText().toString(), point.getLatitude(), point.getLongitude());
             });
 
             map = mapboxMap;
@@ -106,6 +130,7 @@ public class MainActivity extends AppCompatActivity implements MainView {
             hideOnScreenKeyboard();
             Position position = feature.asPosition();
             updateMap(position.getLatitude(), position.getLongitude());
+            mainPresenter.updateHistory(autocomplete.getText().toString(), position.getLatitude(), position.getLongitude());
         });
 
     }
@@ -114,6 +139,10 @@ public class MainActivity extends AppCompatActivity implements MainView {
     public void onStart() {
         super.onStart();
         mapView.onStart();
+
+        drawerMenu();
+        getSupportActionBar().setHomeAsUpIndicator(R.drawable.ic_dehaze_white_24dp);
+        getSupportActionBar().setDisplayHomeAsUpEnabled(true);
     }
 
     @Override
@@ -206,6 +235,49 @@ public class MainActivity extends AppCompatActivity implements MainView {
         Toast.makeText(this, R.string.user_location_permission_not_granted,
                 Toast.LENGTH_LONG).show();
         finish();
+    }
+
+    @Override
+    public void onHistoryUpdated(List<HistoryAddress> list) {
+        menuAdapter.populate(list);
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+
+        switch (item.getItemId()) {
+            case android.R.id.home:
+                mDrawerLayout.openDrawer(Gravity.LEFT);
+                return true;
+        }
+        return super.onOptionsItemSelected(item);
+    }
+
+    private void drawerMenu() {
+
+        List<HistoryAddress> list = CPApplication.getDevicePreference().historyAddress();
+
+        if (list == null) list = new ArrayList<>();
+
+        mDrawerLayout = (DrawerLayout) findViewById(R.id.drawer_layout);
+        mDrawerList = (ListView) findViewById(R.id.left_drawer);
+        menuAdapter = new MenuAdapter(
+                this,
+                R.layout.drawer_list_item,
+                list);
+        mDrawerList.setAdapter(menuAdapter);
+        mDrawerList.setOnItemClickListener(new DrawerItemClickListener());
+
+    }
+
+    private class DrawerItemClickListener implements ListView.OnItemClickListener {
+        @Override
+        public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
+            HistoryAddress clickedItem = (HistoryAddress) parent.getItemAtPosition(position);
+            updateMap(clickedItem.getLatitude(), clickedItem.getLongitude());
+            mainPresenter.updateHistory(clickedItem);
+            mDrawerLayout.closeDrawer(Gravity.LEFT);
+        }
     }
 
 }

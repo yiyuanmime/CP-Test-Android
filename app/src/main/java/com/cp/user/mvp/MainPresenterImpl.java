@@ -4,12 +4,15 @@ import android.app.Activity;
 import android.location.Location;
 import android.support.annotation.NonNull;
 
+import com.cp.user.CPApplication;
+import com.cp.user.model.HistoryAddress;
 import com.mapbox.mapboxsdk.location.LocationSource;
 import com.mapbox.services.android.telemetry.location.LocationEngine;
 import com.mapbox.services.android.telemetry.location.LocationEngineListener;
 import com.mapbox.services.android.telemetry.permissions.PermissionsListener;
 import com.mapbox.services.android.telemetry.permissions.PermissionsManager;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -42,6 +45,47 @@ public class MainPresenterImpl implements MainPresenter, PermissionsListener {
         } else {
             enableLocation(locationEngine);
         }
+    }
+
+    @Override
+    public void updateHistory(String address, double latitude, double longitude) {
+
+        HistoryAddress historyAddress = new HistoryAddress();
+        historyAddress.setAddress(address);
+        historyAddress.setLatitude(latitude);
+        historyAddress.setLongitude(longitude);
+
+        List<HistoryAddress> list = CPApplication.getDevicePreference().historyAddress();
+
+        if (list == null)
+            list = new ArrayList<>();
+
+        list.add(historyAddress);
+
+        if (list.size() > 15)
+            list.remove(0);
+
+        CPApplication.getDevicePreference().historyAddress(list);
+
+        mainView.onHistoryUpdated(list);
+    }
+
+    @Override
+    public void updateHistory(HistoryAddress historyAddress) {
+
+        List<HistoryAddress> list = CPApplication.getDevicePreference().historyAddress();
+
+        if (list == null)
+            list = new ArrayList<>();
+
+        list.add(historyAddress);
+
+        if (list.size() > 15)
+            list.remove(0);
+
+        CPApplication.getDevicePreference().historyAddress(list);
+
+        mainView.onHistoryUpdated(list);
     }
 
     @Override
