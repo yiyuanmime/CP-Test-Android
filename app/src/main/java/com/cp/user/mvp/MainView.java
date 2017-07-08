@@ -14,8 +14,6 @@ public interface MainView {
 
     void setCurrentLocation(Location currentLocation);
 
-    void updateMap(Location location);
-
     void onLocationChanged(Location location);
 
     void noPermissionGranted();

@@ -2,20 +2,12 @@ package com.cp.user.activity;
 
 import android.location.Location;
 import android.os.Bundle;
-import android.support.v4.widget.DrawerLayout;
-import android.support.v7.app.ActionBarDrawerToggle;
-import android.support.v7.app.AppCompatActivity;
 import android.view.Gravity;
 import android.view.MenuItem;
-import android.view.View;
 import android.view.inputmethod.InputMethodManager;
-import android.widget.AdapterView;
-import android.widget.ListView;
 import android.widget.Toast;
 
-import com.cp.user.CPApplication;
 import com.cp.user.R;
-import com.cp.user.adapter.MenuAdapter;
 import com.cp.user.bus.ApplicationBus;
 import com.cp.user.model.HistoryAddress;
 import com.cp.user.mvp.MainPresenter;
@@ -35,11 +27,9 @@ import com.mapbox.services.api.geocoding.v5.MapboxGeocoding;
 import com.mapbox.services.api.geocoding.v5.models.GeocodingResponse;
 import com.mapbox.services.commons.models.Position;
 
-import java.util.ArrayList;
 import java.util.List;
 
 import butterknife.BindView;
-import butterknife.ButterKnife;
 import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
@@ -49,7 +39,7 @@ import retrofit2.Response;
  */
 
 @SuppressWarnings({"MissingPermission"})
-public class MainActivity extends AppCompatActivity implements MainView {
+public class MapBoxActivity extends BaseActivity implements MainView {
 
     private MarkerView userMarker;
     private MarkerView adrMarker;
@@ -59,15 +49,6 @@ public class MainActivity extends AppCompatActivity implements MainView {
 
     private MainPresenter mainPresenter;
 
-    private MenuAdapter menuAdapter;
-    private ActionBarDrawerToggle mDrawerToggle;
-
-    @BindView(R.id.drawer_layout)
-    DrawerLayout mDrawerLayout;
-
-    @BindView(R.id.left_drawer)
-    ListView mDrawerList;
-
     @BindView(R.id.mapView)
     MapView mapView;
 
@@ -75,14 +56,23 @@ public class MainActivity extends AppCompatActivity implements MainView {
     GeocoderAutoCompleteView autocomplete;
 
     @Override
-    protected void onCreate(Bundle savedInstanceState) {
+    public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_main);
-        ButterKnife.bind(this);
 
         mainPresenter = new MainPresenterImpl(this, this);
 
         mapView.onCreate(savedInstanceState);
+
+        initMapProvider();
+    }
+
+    @Override
+    protected int getLayoutResourceId() {
+        return R.layout.activity_main;
+    }
+
+    @Override
+    protected void initMapProvider() {
         mapView.getMapAsync(mapboxMap -> {
 
             mapboxMap.setOnMapLongClickListener(point -> {
@@ -132,17 +122,29 @@ public class MainActivity extends AppCompatActivity implements MainView {
             updateMap(position.getLatitude(), position.getLongitude());
             mainPresenter.updateHistory(autocomplete.getText().toString(), position.getLatitude(), position.getLongitude());
         });
+    }
 
+    @Override
+    protected void updateMap(HistoryAddress historyAddress) {
+        if (!android.text.TextUtils.isEmpty(historyAddress.getAddress())){
+            autocomplete.setOnFeatureListener(null);
+            autocomplete.setText(historyAddress.getAddress());
+            autocomplete.setOnFeatureListener(feature -> {
+                hideOnScreenKeyboard();
+                Position position = feature.asPosition();
+                updateMap(position.getLatitude(), position.getLongitude());
+                mainPresenter.updateHistory(autocomplete.getText().toString(), position.getLatitude(), position.getLongitude());
+            });
+        }
+
+        updateMap(historyAddress.getLatitude(), historyAddress.getLongitude());
+        mainPresenter.updateHistory(historyAddress);
     }
 
     @Override
     public void onStart() {
         super.onStart();
         mapView.onStart();
-
-        drawerMenu();
-        getSupportActionBar().setHomeAsUpIndicator(R.drawable.ic_dehaze_white_24dp);
-        getSupportActionBar().setDisplayHomeAsUpEnabled(true);
     }
 
     @Override
@@ -220,11 +222,6 @@ public class MainActivity extends AppCompatActivity implements MainView {
     }
 
     @Override
-    public void updateMap(Location location) {
-
-    }
-
-    @Override
     public void onLocationChanged(Location location) {
         map.moveCamera(CameraUpdateFactory.newLatLngZoom(new LatLng(location), 16));
         userMarker.setPosition(new LatLng(location));
@@ -239,7 +236,7 @@ public class MainActivity extends AppCompatActivity implements MainView {
 
     @Override
     public void onHistoryUpdated(List<HistoryAddress> list) {
-        menuAdapter.populate(list);
+        refreshMenu(list);
     }
 
     @Override
@@ -251,33 +248,6 @@ public class MainActivity extends AppCompatActivity implements MainView {
                 return true;
         }
         return super.onOptionsItemSelected(item);
-    }
-
-    private void drawerMenu() {
-
-        List<HistoryAddress> list = CPApplication.getDevicePreference().historyAddress();
-
-        if (list == null) list = new ArrayList<>();
-
-        mDrawerLayout = (DrawerLayout) findViewById(R.id.drawer_layout);
-        mDrawerList = (ListView) findViewById(R.id.left_drawer);
-        menuAdapter = new MenuAdapter(
-                this,
-                R.layout.drawer_list_item,
-                list);
-        mDrawerList.setAdapter(menuAdapter);
-        mDrawerList.setOnItemClickListener(new DrawerItemClickListener());
-
-    }
-
-    private class DrawerItemClickListener implements ListView.OnItemClickListener {
-        @Override
-        public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
-            HistoryAddress clickedItem = (HistoryAddress) parent.getItemAtPosition(position);
-            updateMap(clickedItem.getLatitude(), clickedItem.getLongitude());
-            mainPresenter.updateHistory(clickedItem);
-            mDrawerLayout.closeDrawer(Gravity.LEFT);
-        }
     }
 
 }
