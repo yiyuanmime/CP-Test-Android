@@ -3,23 +3,25 @@ package com.cp.user.activity;
 import android.location.Location;
 import android.os.Bundle;
 import android.support.v7.app.AppCompatActivity;
+import android.view.inputmethod.InputMethodManager;
 import android.widget.Toast;
 
 import com.cp.user.R;
 import com.cp.user.bus.ApplicationBus;
+import com.cp.user.mvp.MainPresenter;
+import com.cp.user.mvp.MainPresenterImpl;
+import com.cp.user.mvp.MainView;
+import com.mapbox.mapboxsdk.Mapbox;
 import com.mapbox.mapboxsdk.annotations.MarkerView;
 import com.mapbox.mapboxsdk.annotations.MarkerViewOptions;
+import com.mapbox.mapboxsdk.camera.CameraPosition;
 import com.mapbox.mapboxsdk.camera.CameraUpdateFactory;
 import com.mapbox.mapboxsdk.geometry.LatLng;
-import com.mapbox.mapboxsdk.location.LocationSource;
 import com.mapbox.mapboxsdk.maps.MapView;
 import com.mapbox.mapboxsdk.maps.MapboxMap;
-import com.mapbox.services.android.telemetry.location.LocationEngine;
-import com.mapbox.services.android.telemetry.location.LocationEngineListener;
-import com.mapbox.services.android.telemetry.permissions.PermissionsListener;
-import com.mapbox.services.android.telemetry.permissions.PermissionsManager;
-
-import java.util.List;
+import com.mapbox.services.android.ui.geocoder.GeocoderAutoCompleteView;
+import com.mapbox.services.api.geocoding.v5.GeocodingCriteria;
+import com.mapbox.services.commons.models.Position;
 
 import butterknife.BindView;
 import butterknife.ButterKnife;
@@ -29,44 +31,53 @@ import butterknife.ButterKnife;
  */
 
 @SuppressWarnings({"MissingPermission"})
-public class MainActivity extends AppCompatActivity implements PermissionsListener {
+public class MainActivity extends AppCompatActivity implements MainView {
 
     private MarkerView userMarker;
+    private MarkerView adrMarker;
     private MapboxMap map;
 
-    private LocationEngine locationEngine;
-    private LocationEngineListener locationListener;
+    private String[] COUNTRIES = {"FR"};
 
-    private PermissionsManager permissionsManager;
+    private MainPresenter mainPresenter;
 
     @BindView(R.id.mapView)
     MapView mapView;
+
+    @BindView(R.id.query)
+    GeocoderAutoCompleteView autocomplete;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         ButterKnife.bind(this);
-        mapView.onCreate(savedInstanceState);
-        locationEngine = new LocationSource(this);
-        locationEngine.activate();
 
+        mainPresenter = new MainPresenterImpl(this, this);
+
+        mapView.onCreate(savedInstanceState);
         mapView.getMapAsync(mapboxMap -> {
             map = mapboxMap;
             userMarker = mapboxMap.addMarker(
                     new MarkerViewOptions()
                             .position(new LatLng(0, 0))
                             .anchor(0.5f, 0.5f), markerView -> {
-                        // Check if user has granted location permission
-                        if (!PermissionsManager.areLocationPermissionsGranted(MainActivity.this)) {
-                            permissionsManager = new PermissionsManager(MainActivity.this);
-                            permissionsManager.requestLocationPermissions(MainActivity.this);
-                        } else {
-                            enableLocation();
-                        }
-
+                        mainPresenter.initLocation();
                     });
 
+        });
+
+        autocomplete.setAccessToken(Mapbox.getAccessToken());
+        autocomplete.setCountries(COUNTRIES);
+        autocomplete.setType(GeocodingCriteria.TYPE_POI);
+        autocomplete.setOnFeatureListener(feature -> {
+
+            if (map != null && adrMarker != null)
+                map.removeMarker(adrMarker);
+
+            hideOnScreenKeyboard();
+            Position position = feature.asPosition();
+            updateMap(position.getLatitude(), position.getLongitude());
         });
 
     }
@@ -75,12 +86,6 @@ public class MainActivity extends AppCompatActivity implements PermissionsListen
     public void onStart() {
         super.onStart();
         mapView.onStart();
-
-        if (locationEngine != null && locationListener != null) {
-            locationEngine.activate();
-            locationEngine.requestLocationUpdates();
-            locationEngine.addLocationEngineListener(locationListener);
-        }
     }
 
     @Override
@@ -121,46 +126,55 @@ public class MainActivity extends AppCompatActivity implements PermissionsListen
         mapView.onSaveInstanceState(outState);
     }
 
-    private void enableLocation() {
-        // If we have the last location of the user, we can move the camera to that position.
-        Location lastLocation = locationEngine.getLastLocation();
-        if (lastLocation != null) {
-            map.moveCamera(CameraUpdateFactory.newLatLngZoom(new LatLng(lastLocation), 16));
-            userMarker.setPosition(new LatLng(lastLocation));
+    private void hideOnScreenKeyboard() {
+        try {
+            InputMethodManager imm = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+            if (getCurrentFocus() != null) {
+                imm.hideSoftInputFromWindow(this.getCurrentFocus().getWindowToken(), InputMethodManager.HIDE_NOT_ALWAYS);
+            }
+        } catch (Exception exception) {
+            throw new RuntimeException(exception);
         }
+    }
 
-        locationListener = new LocationEngineListener() {
-            @Override
-            public void onConnected() {
-                locationEngine.requestLocationUpdates();
-            }
+    private void updateMap(double latitude, double longitude) {
+        // Build marker
+        adrMarker = map.addMarker(new MarkerViewOptions()
+                .position(new LatLng(latitude, longitude))
+                .title(getString(R.string.geocode_activity_marker_options_title)));
 
-            @Override
-            public void onLocationChanged(Location location) {
-                if (location != null) {
-                    map.moveCamera(CameraUpdateFactory.newLatLngZoom(new LatLng(location), 16));
-                    locationEngine.removeLocationEngineListener(this);
-                    userMarker.setPosition(new LatLng(location));
-                }
-            }
-        };
-        locationEngine.addLocationEngineListener(locationListener);
+        // Animate camera to geocoder result location
+        CameraPosition cameraPosition = new CameraPosition.Builder()
+                .target(new LatLng(latitude, longitude))
+                .zoom(15)
+                .build();
+
+        map.animateCamera(CameraUpdateFactory.newCameraPosition(cameraPosition), 3000, null);
     }
 
     @Override
-    public void onExplanationNeeded(List<String> permissionsToExplain) {
+    public void setCurrentLocation(Location currentLocation) {
+        map.moveCamera(CameraUpdateFactory.newLatLngZoom(new LatLng(currentLocation), 16));
+        userMarker.setPosition(new LatLng(currentLocation));
+    }
+
+    @Override
+    public void updateMap(Location location) {
 
     }
 
     @Override
-    public void onPermissionResult(boolean granted) {
-        if (granted) {
-            enableLocation();
-        } else {
-            Toast.makeText(this, R.string.user_location_permission_not_granted,
-                    Toast.LENGTH_LONG).show();
-            finish();
-        }
+    public void onLocationChanged(Location location) {
+        map.moveCamera(CameraUpdateFactory.newLatLngZoom(new LatLng(location), 16));
+        userMarker.setPosition(new LatLng(location));
     }
+
+    @Override
+    public void noPermissionGranted() {
+        Toast.makeText(this, R.string.user_location_permission_not_granted,
+                Toast.LENGTH_LONG).show();
+        finish();
+    }
+
 
 }

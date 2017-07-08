@@ -6,8 +6,25 @@
 
     <com.mapbox.mapboxsdk.maps.MapView
         android:id="@+id/mapView"
-        mapbox:mapbox_styleUrl="@string/mapbox_style_mapbox_streets"
         android:layout_width="match_parent"
-        android:layout_height="match_parent" />
+        android:layout_height="match_parent"
+        mapbox:mapbox_styleUrl="@string/mapbox_style_mapbox_streets"
+        mapbox:mapbox_uiCompassMarginRight="16dp"
+        mapbox:mapbox_uiCompassMarginTop="80dp" />
+
+    <com.mapbox.services.android.ui.geocoder.GeocoderAutoCompleteView
+        android:id="@+id/query"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginLeft="16dp"
+        android:layout_marginRight="16dp"
+        android:layout_marginTop="16dp"
+        android:background="@android:color/white"
+        android:elevation="12dp"
+        android:hint="@string/hint_text_in_geocode_widget"
+        android:maxLines="1"
+        android:padding="10dp"
+        android:textColor="@android:color/black"
+        android:textSize="14sp" />
 
 </RelativeLayout>
