@@ -1,4 +1,3 @@
-# CP-Test-Android
+# Sample app implementing Mapbox
 
-# ETAPE 7
-Nothing to do here , it's already UI/UX friendly. 
+
